@@ -1,0 +1,4 @@
+Bundle-Name: zip-nio
+Bundle-SymbolicName: zip.nio
+Bundle-Version: 1.0.0
+Export-Package: zip.nio.api
