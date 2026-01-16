@@ -1,39 +1,25 @@
-# Liferay ZipReader NIO Optimization
+# Liferay Zip NIO Optimization (Reader & Writer)
 
-This module provides a high-performance implementation of Liferay's `ZipReader` interface. It is specifically engineered to handle large **Liferay Archive (LAR)** files (multi-GB) containing thousands of XML entries, drastically optimizing CPU usage and Java Heap management.
+This module provides a high-performance implementation for both **ZipReader** and **ZipWriter** Liferay interfaces. It is specifically engineered to handle large **Liferay Archive (LAR)** files (multi-GB) containing thousands of XML entries, drastically optimizing CPU usage and Java Heap management during both Import and Export processes.
+
+---
 
 ## 🚀 Problem vs. Solution
 
-### Legacy Implementation (`java.util.zip`)
-* **Inefficient CPU Usage:** Every time an entry is requested or a folder is listed, the original implementation re-opens the file and re-scans the ZIP's Central Directory. This causes constant CPU spikes.
-* **Sequential Scanning:** To find a specific file, it iterates through all ZIP entries, which is extremely slow for multi-gigabyte archives.
-* **Disk I/O Overhead:** It fails to leverage modern Operating System memory-mapping capabilities.
+### Legacy Implementation (`java.util.zip` / Default Liferay)
+* **ZipReader Inefficiency:** Every time an entry is requested or a folder is listed, the original implementation re-opens the file and re-scans the ZIP's Central Directory.
+* **ZipWriter Bottleneck:** The default writer often opens and closes the `ZipFileSystem` for every entry or batch of entries. This forces a full rewrite of the ZIP Central Directory multiple times during a single export.
+* **CPU & I/O Spikes:** For a LAR with 10,000 files, the legacy approach performs thousands of redundant "mount/unmount" operations, leading to massive CPU overhead.
 
-### This Implementation (`java.nio.file.ZipFileSystem`)
-* **True Random Access:** Uses a virtual file system mounted in native memory. Access to any file is nearly instantaneous.
-* **CPU Reduction:** The index is processed only once. Calls to `getFolderEntries` access the node structure directly.
-* **Heap Optimization:** Uses native buffers and features a `useTempFile` configuration to move management from RAM to disk.
+### Optimized NIO Implementation (`java.nio.file.ZipFileSystem`)
+* **Persistent FileSystem Session:** Unlike the default implementation, our `ZipWriter` keeps the `FileSystem` open until the process is finished. The ZIP index is written **only once** at the end.
+* **True Random Access (Reader):** Uses a virtual file system mapping. Access to any file within a multi-GB LAR is nearly instantaneous ($O(1)$ complexity).
+* **Resource Efficiency:** Native UTF-8 support (no Reflection hacks) and optimized memory buffers reduce the pressure on the Java Garbage Collector.
+
+---
 
 ## ✨ Key Features
 
-* **Thread-Safe Initialization:** Handles `FileSystemAlreadyExistsException` for safe concurrent access in Liferay.
-* **Lazy Loading:** File content is not loaded until the `InputStream` is actually requested.
-* **Resource Management:** Robust `close()` implementation that releases native file descriptors and deletes temporary files.
-* **OSGi Service Ranking:** Configured with `service.ranking:Integer=1000` to override the default Liferay implementation.
-
-## 🛠️ Performance Configuration
-
-To maximize memory savings, the implementation includes:
-`env.put("useTempFile", "true");`
-
-## 📦 Installation
-
-1. Copy this module into `modules/` in your Liferay Workspace.
-2. Deploy: `./gradlew deploy`.
-3. Disable legacy factory: `scr:disable com.liferay.portal.zip.internal.reader.factory.ZipReaderFactoryImpl`
-
-## 📊 Expected Results
-
-* **Validation Time:** 60-80% reduction.
-* **CPU Load:** Stabilization of Garbage Collector activity.
-* **Reliability:** Prevention of `OutOfMemoryError` during massive imports.
+* **Stateful Writing:** Keeps the ZIP stream open during the entire lifecycle of an export, eliminating the "open-write-close" loop.
+* **Thread-Safe Reader:** Handles `FileSystemAlreadyExistsException` to allow safe concurrent access when Liferay validates and imports the same file simultaneously.
+* **Memory Safeguards:** Features `useTempFile` configuration to offload ZIP structure management from RAM to disk.
