@@ -1,1 +1,2 @@
-// Check GETTING_STARTED.markdown for information regarding usage.
+sourceCompatibility = "17"
+targetCompatibility = "17"
